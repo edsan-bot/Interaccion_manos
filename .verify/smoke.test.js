@@ -20,6 +20,17 @@ const sandbox = {
   PI: Math.PI,
   HALF_PI: Math.PI / 2,
   millis: (() => { let t = Date.now(); return () => Date.now() - t; })(),
+  CONFIG: {
+    canvasW: 640, canvasH: 480,
+    maxHands: 1, modelType: 'lite', flipHorizontal: true,
+    smoothingAlpha: 0.4, minCutSpeed: 130, noHandPauseMs: 1200,
+    gravity: 0.38, spawnSpeedBase: 7.5, spawnSpeedMax: 12,
+    spawnInterval: 750, spawnIntervalMin: 330, maxFruits: 9, missGraceMs: 700,
+    difficultyEveryCuts: 12, difficultySpeedStep: 1.5, difficultySpawnStep: 0.88,
+    maxLives: 3, pointsFruit: 100, pointsGolden: 300, streakThreshold: 5, streakBonus: 250,
+    probBomb: 0.07, probGolden: 0.05, probHeart: 0.04,
+    maxParticles: 240, particleLifeFrames: 42
+  },
   // minúsculas que p5 expone y algunos archivos usan en draw (no las llamamos, pero las definimos por si acaso)
   createCanvas: () => {},
   image: () => {},
@@ -44,6 +55,9 @@ const sandbox = {
 };
 
 vm.createContext(sandbox);
+sandbox.fruits = undefined;
+sandbox.particles = undefined;
+sandbox.knife = undefined;
 function load(file) {
   const code = fs.readFileSync(path.join(root, file), 'utf8');
   return vm.runInContext(code, sandbox, { filename: file });
