@@ -6,21 +6,32 @@ let handPoseModel = null;
 let modelReady = false;
 let modelError = null;
 let videoReady = false;
+let videoDimensionsReady = false;
 let video = null;
 let hands = [];
 let rawTip = null; // {x, y, t, found} en píxeles del video
 
 function initCamera() {
   try {
-    // p5 2.3.2: createCapture(constraints, {flipped: true}, callback)
-    // audio: false para que el navegador no pida el micrófono (espec. §14.2)
+    // p5 2.3.2: createCapture(type, {flipped: true}, callback)
+    // audio por defecto se pide si no se usa constraints con audio:false;
+    // usamos VIDEO simple + flipped para que el permiso sea solo de cámara.
     video = createCapture(
-      { video: true, audio: false },
+      VIDEO,
       { flipped: CONFIG.flipHorizontal },
       onVideoReady
     );
     video.size(CONFIG.canvasW, CONFIG.canvasH);
     video.hide();
+
+    // Si el video ya tiene metadatos, marcar dimensiones listas
+    if (video.elt && video.elt.videoWidth > 0) {
+      videoDimensionsReady = true;
+    } else if (video.elt) {
+      video.elt.addEventListener('loadedmetadata', () => {
+        videoDimensionsReady = true;
+      }, { once: true });
+    }
   } catch (err) {
     modelError = err;
     updateStatus('No se pudo iniciar la captura de video.');
@@ -28,8 +39,9 @@ function initCamera() {
   }
 }
 
-function onVideoReady() {
+function onVideoReady(stream) {
   videoReady = true;
+  videoDimensionsReady = true;
   updateStatus('Cámara lista.');
 }
 
@@ -60,9 +72,9 @@ function onModelReady(err) {
 }
 
 function startDetection() {
-  if (handPoseModel && modelReady && videoReady && !handPoseModel.detecting) {
-    handPoseModel.detectStart(video, onHands);
-  }
+  if (!handPoseModel || !modelReady || !videoReady || !videoDimensionsReady) return;
+  if (handPoseModel.detecting) return;
+  handPoseModel.detectStart(video, onHands);
 }
 
 function stopDetection() {
@@ -75,10 +87,12 @@ function onHands(results) {
   hands = results || [];
   const now = millis();
   const tip = hands.length > 0 ? hands[0].index_finger_tip : null;
-  if (tip) {
+  if (tip && video && video.elt) {
+    const vw = video.elt.videoWidth || CONFIG.canvasW;
+    const vh = video.elt.videoHeight || CONFIG.canvasH;
     // Salvaguarda: si ml5 devolviera coordenadas normalizadas (0-1), escalarlas al video.
-    const sx = tip.x < 2 ? video.elt.videoWidth : 1;
-    const sy = tip.y < 2 ? video.elt.videoHeight : 1;
+    const sx = tip.x < 2 ? vw : 1;
+    const sy = tip.y < 2 ? vh : 1;
     rawTip = { x: tip.x * sx, y: tip.y * sy, t: now, found: true };
   } else {
     rawTip = { found: false, t: now };
@@ -89,10 +103,15 @@ function onHands(results) {
 // El video se renderiza espejado y ml5 recibe flipHorizontal: true, por lo que
 // los landmarks ya vienen espejados: el mapeo es 1:1 escalado al canvas.
 function videoToCanvas(x, y) {
-  const vw = max(1, video ? video.elt.videoWidth : CONFIG.canvasW);
-  const vh = max(1, video ? video.elt.videoHeight : CONFIG.canvasH);
+  const vw = max(1, video && video.elt ? video.elt.videoWidth : CONFIG.canvasW);
+  const vh = max(1, video && video.elt ? video.elt.videoHeight : CONFIG.canvasH);
   return {
     x: (x / vw) * CONFIG.canvasW,
     y: (y / vh) * CONFIG.canvasH
   };
+}
+
+// Indica si la cámara está lista para usarse (sin errores y con dimensiones)
+function cameraIsReady() {
+  return videoReady && videoDimensionsReady && video && video.elt;
 }

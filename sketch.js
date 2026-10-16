@@ -68,14 +68,15 @@ function setup() {
   game = new Game();
   game.particles = particles;
 
-  // Si la cámara nunca responde, avisar claramente (espec. §10, §14.7)
-  setTimeout(() => {
-    if (!videoReady) {
-      updateStatus(
-        'Cámara no disponible. Concedé permiso y serví el sitio desde http://localhost.'
-      );
+  // Diagnóstico de cámara si no responde (espec. §10, §14.7)
+  let cameraWarned = false;
+  setInterval(() => {
+    if (cameraWarned) return;
+    if (!videoReady && !modelError) {
+      updateStatus('Esperando permiso de cámara… (concedelo en el navegador)');
+      cameraWarned = true;
     }
-  }, 7000);
+  }, 3000);
 }
 
 function updateStatus(msg) {
@@ -87,16 +88,14 @@ function draw() {
   background(10, 13, 28);
 
   // Pantallas de carga / error antes de poder jugar
-  if (!videoReady) {
-    drawStatus('Iniciando cámara…');
-    return;
-  }
-  if (modelError) {
-    drawStatus('No se pudo cargar el modelo de manos.');
-    return;
-  }
-  if (!modelReady) {
-    drawStatus('Cargando modelo de manos…');
+  if (!cameraIsReady()) {
+    if (modelError) {
+      drawStatus('No se pudo cargar el modelo de manos.');
+    } else if (!videoReady) {
+      drawStatus('Esperando acceso a la cámara…');
+    } else {
+      drawStatus('Iniciando cámara…');
+    }
     return;
   }
 
