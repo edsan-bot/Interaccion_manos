@@ -1,0 +1,93 @@
+/* style.css — Fruit Ninja */
+:root {
+  --ink: #0e1430;
+  --panel: rgba(255, 255, 255, 0.07);
+  --accent: #ff4d6d;
+  --accent2: #7c5cff;
+  --text: #e8eaf6;
+  --muted: #9aa5c4;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  background: radial-gradient(circle at top left, #161b33, #050814);
+  color: var(--text);
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+}
+
+header {
+  text-align: center;
+}
+
+h1 {
+  font-size: 1.6rem;
+  letter-spacing: 0.06em;
+  text-shadow: 0 2px 12px rgba(124, 92, 255, 0.35);
+}
+
+.status {
+  margin-top: 6px;
+  font-size: 0.9rem;
+  color: var(--muted);
+  min-height: 1.2em;
+}
+
+#sketch-container {
+  position: relative;
+  width: 100%;
+  max-width: 640px;
+  aspect-ratio: 4 / 3;
+}
+
+canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 86vh;
+  margin: 0 auto;
+  background: #000;
+  border-radius: 14px;
+  box-shadow: 0 0 60px rgba(0, 0, 0, 0.7);
+}
+
+footer {
+  margin-top: auto;
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.5;
+  max-width: 640px;
+}
+
+.hint + .hint {
+  margin-top: 6px;
+}
+
+code {
+  color: #9ecbff;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 0.82rem;
+}
+
+@media (max-width: 640px) {
+  h1 {
+    font-size: 1.3rem;
+  }
+  body {
+    padding: 10px;
+  }
+}
