@@ -8,18 +8,23 @@ let modelError = null;
 let videoReady = false;
 let video = null;
 let hands = [];
-let rawTip = null; // {x, y, t, found} en píxeles del video (ml5 ya los espeja con flipHorizontal)
+let rawTip = null; // {x, y, t, found} en píxeles del video
 
 function initCamera() {
   try {
+    // p5 2.3.2: createCapture(constraints, {flipped: true}, callback)
     // audio: false para que el navegador no pida el micrófono (espec. §14.2)
-    video = createCapture({ video: true, audio: false }, onVideoReady);
+    video = createCapture(
+      { video: true, audio: false },
+      { flipped: CONFIG.flipHorizontal },
+      onVideoReady
+    );
     video.size(CONFIG.canvasW, CONFIG.canvasH);
     video.hide();
   } catch (err) {
-    modelError = 'No se pudo iniciar la captura de video.';
+    modelError = err;
+    updateStatus('No se pudo iniciar la captura de video.');
     console.error(err);
-    updateStatus('Cámara no disponible.');
   }
 }
 
@@ -29,21 +34,29 @@ function onVideoReady() {
 }
 
 function initHandPose() {
-  handPoseModel = ml5.handPose({
-    maxHands: CONFIG.maxHands,
-    modelType: CONFIG.modelType,
-    flipHorizontal: CONFIG.flipHorizontal
-  });
-  handPoseModel.ready
-    .then(() => {
-      modelReady = true;
-      updateStatus('Modelo de manos listo.');
-    })
-    .catch(err => {
-      modelError = err;
-      updateStatus('Error cargando el modelo de manos.');
-      console.error(err);
-    });
+  // Patrón estándar de ml5: callback en lugar de .ready (más robusto en v1.4.0)
+  handPoseModel = ml5.handPose(
+    {
+      maxHands: CONFIG.maxHands,
+      modelType: CONFIG.modelType,
+      flipHorizontal: CONFIG.flipHorizontal
+    },
+    onModelReady
+  );
+}
+
+function onModelReady(err) {
+  if (err) {
+    modelError = err;
+    updateStatus('Error cargando el modelo de manos.');
+    console.error(err);
+    return;
+  }
+  modelReady = true;
+  updateStatus('Modelo de manos listo.');
+  if (videoReady) {
+    startDetection();
+  }
 }
 
 function startDetection() {
