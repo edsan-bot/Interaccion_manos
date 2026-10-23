@@ -1,27 +1,37 @@
 <!doctype html>
 <html lang="es">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Fruit Ninja — Corta con las manos</title>
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
-  <header>
-    <h1>Fruit Ninja <span style="font-weight: 400; opacity: 0.8;">· visión artificial</span></h1>
-    <p id="status" class="status">Iniciando…</p>
-  </header>
-  <div id="sketch-container"></div>
-  <footer>
-    <p class="hint">Permite el acceso a la cámara y mostra la mano. La punta del índice es el cuchillo. Corta frutas, evita las bombas.</p>
-    <p class="hint">Sirve este proyecto con un servidor local (p. ej. "Go Live" de VS Code). No funciona abriendo el HTML directamente (<code>file://</code>).</p>
-  </footer>
-  <!-- Orden obligatorio: p5 → ml5 → código propio (espec. §3, §9, §14.1) -->
-  <script src="https://cdn.jsdelivr.net/npm/p5@2.3.2/lib/p5.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/ml5@1.4.0/dist/ml5.js"></script>
-  <script src="fruit.js"></script>
-  <script src="game.js"></script>
-  <script src="handTracking.js"></script>
-  <script src="sketch.js"></script>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fruit Ninja — Corta con las manos</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>
+        Fruit Ninja
+        <span style="font-weight: 400; opacity: 0.8">· visión artificial</span>
+      </h1>
+      <p id="status" class="status">Iniciando…</p>
+    </header>
+    <div id="sketch-container"></div>
+    <footer>
+      <p class="hint">
+        Permite el acceso a la cámara y mostra la mano. La punta del índice es
+        el cuchillo. Corta frutas, evita las bombas.
+      </p>
+      <p class="hint">
+        Sirve este proyecto con un servidor local (p. ej. "Go Live" de VS Code).
+        No funciona abriendo el HTML directamente (<code>file://</code>).
+      </p>
+    </footer>
+    <!-- Orden obligatorio: p5 → ml5 → código propio (espec. §3, §9, §14.1) -->
+    <script src="https://cdn.jsdelivr.net/npm/p5@2.3.2/lib/p5.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ml5@1.4.0/dist/ml5.js"></script>
+    <script src="fruit.js"></script>
+    <script src="game.js"></script>
+    <script src="handTracking.js"></script>
+    <script src="sketch.js"></script>
+  </body>
 </html>

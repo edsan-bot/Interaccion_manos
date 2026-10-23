@@ -13,73 +13,121 @@ let rawTip = null; // {x, y, t, found} en píxeles del video
 
 function initCamera() {
   try {
-    // p5 2.3.2: createCapture(type, {flipped: true}, callback)
-    // audio por defecto se pide si no se usa constraints con audio:false;
-    // usamos VIDEO simple + flipped para que el permiso sea solo de cámara.
-    video = createCapture(
-      VIDEO,
-      { flipped: CONFIG.flipHorizontal },
-      onVideoReady
-    );
+    // p5 2.3.2: createCapture con constraints para evitar prompt de micrófono.
+    // Usar objeto { audio: false, video: true } en lugar de VIDEO constante,
+    // ya que p5 2.3.2 espera el segundo parámetro como objeto de constraints
+    // cuando se pasa el tipo de captura así.
+    video = createCapture({ audio: false, video: true }, onVideoReady);
     video.size(CONFIG.canvasW, CONFIG.canvasH);
     video.hide();
 
     // Si el video ya tiene metadatos, marcar dimensiones listas
     if (video.elt && video.elt.videoWidth > 0) {
       videoDimensionsReady = true;
+      if (modelReady) {
+        startDetection();
+      }
     } else if (video.elt) {
-      video.elt.addEventListener('loadedmetadata', () => {
-        videoDimensionsReady = true;
-      }, { once: true });
+      video.elt.addEventListener(
+        "loadedmetadata",
+        () => {
+          videoDimensionsReady = true;
+          if (modelReady) {
+            startDetection();
+          }
+        },
+        { once: true },
+      );
     }
   } catch (err) {
     modelError = err;
-    updateStatus('No se pudo iniciar la captura de video.');
+    updateStatus("No se pudo iniciar la captura de video.");
     console.error(err);
   }
 }
 
 function onVideoReady(stream) {
   videoReady = true;
-  videoDimensionsReady = true;
-  updateStatus('Cámara lista.');
+  updateStatus("Cámara lista.");
+  // Las dimensiones se marcan en loadedmetadata; si ya estaban listas y el
+  // modelo también, startDetection ya se disparó desde initCamera.
 }
 
-function initHandPose() {
-  // Patrón estándar de ml5: callback en lugar de .ready (más robusto en v1.4.0)
-  handPoseModel = ml5.handPose(
-    {
+// OJO: con p5 2.x, ml5 1.4.0 promisifica sus factories.
+// setupP5Integration() llama a registerAsyncConstructors() porque checkP5() busca
+// prototype.registerMethod, que p5 2.x eliminó. Resultado: ml5.handPose() devuelve
+// una Promise que resuelve a la instancia, NO la instancia. Con `await` funciona en
+// ambas ramas (una Promise se espera; una instancia se devuelve tal cual).
+async function initHandPose() {
+  try {
+    const model = ml5.handPose({
       maxHands: CONFIG.maxHands,
       modelType: CONFIG.modelType,
-      flipHorizontal: CONFIG.flipHorizontal
-    },
-    onModelReady
-  );
-}
-
-function onModelReady(err) {
-  if (err) {
+    });
+    handPoseModel = model && typeof model.then === "function" ? await model : model;
+    if (handPoseModel && handPoseModel.ready) await handPoseModel.ready;
+    modelReady = true;
+    updateStatus("Modelo de manos listo.");
+    if (videoReady) {
+      startDetection();
+    }
+  } catch (err) {
     modelError = err;
-    updateStatus('Error cargando el modelo de manos.');
+    updateStatus("Error cargando el modelo de manos.");
     console.error(err);
-    return;
-  }
-  modelReady = true;
-  updateStatus('Modelo de manos listo.');
-  if (videoReady) {
-    startDetection();
   }
 }
 
 function startDetection() {
-  if (!handPoseModel || !modelReady || !videoReady || !videoDimensionsReady) return;
+  if (modelError) return;
+  if (!handPoseModel || !modelReady || !videoReady || !videoDimensionsReady)
+    return;
+  // Con p5 2.x el modelo llega por Promise; si algo se coló sin resolver, no
+  // reventar el ciclo de dibujo cada frame.
+  if (typeof handPoseModel.detectStart !== "function") {
+    modelError = new Error("ml5: el modelo no expone detectStart()");
+    updateStatus("Error iniciando la detección de manos.");
+    console.error(modelError, handPoseModel);
+    return;
+  }
   if (handPoseModel.detecting) return;
-  handPoseModel.detectStart(video, onHands);
+  // ml5 necesita el elemento HTML nativo <video>, no el wrapper de p5.
+  const videoElt = video && video.elt ? video.elt : video;
+  if (!videoElt || videoElt.videoWidth <= 0) return;
+  try {
+    // Asegurar que el video esté reproduciendo para que ml5 pueda leer frames.
+    if (typeof videoElt.play === "function") {
+      videoElt.play().catch(() => {
+        // El navegador puede bloquear autoplay sin interacción del usuario;
+        // no es fatal: ml5 intentará leer frames igual cuando esté disponible.
+      });
+    }
+    handPoseModel.detectStart(videoElt, onHands);
+  } catch (err) {
+    // Nunca dejar que un error de ml5 congele el ciclo de p5.
+    modelError = err;
+    updateStatus("Error iniciando la detección de manos.");
+    console.error(err);
+  }
 }
 
 function stopDetection() {
   if (handPoseModel) {
-    handPoseModel.detectStop();
+    try {
+      // ml5 1.4.0: detectStop no siempre es una función; usar signalStop como fallback.
+      if (typeof handPoseModel.detectStop === "function") {
+        handPoseModel.detectStop();
+      } else {
+        handPoseModel.signalStop = true;
+      }
+    } catch (err) {
+      // Fallback defensivo si detectStop falla en algún entorno.
+      try {
+        handPoseModel.signalStop = true;
+      } catch (err2) {
+        // Secundary error ignored
+      }
+    }
   }
 }
 
@@ -100,14 +148,19 @@ function onHands(results) {
 }
 
 // Píxeles del video → píxeles del canvas.
-// El video se renderiza espejado y ml5 recibe flipHorizontal: true, por lo que
-// los landmarks ya vienen espejados: el mapeo es 1:1 escalado al canvas.
+// ml5 entrega los landmarks sin espejar (flipHorizontal queda en false) y el
+// video se dibuja espejado. La transformación vive acá y solo acá, para poder
+// cumplir CONFIG.flipHorizontal sin duplicar el espejado (espec. §14.3).
 function videoToCanvas(x, y) {
   const vw = max(1, video && video.elt ? video.elt.videoWidth : CONFIG.canvasW);
-  const vh = max(1, video && video.elt ? video.elt.videoHeight : CONFIG.canvasH);
+  const vh = max(
+    1,
+    video && video.elt ? video.elt.videoHeight : CONFIG.canvasH,
+  );
+  const nx = x / vw;
   return {
-    x: (x / vw) * CONFIG.canvasW,
-    y: (y / vh) * CONFIG.canvasH
+    x: (CONFIG.flipHorizontal ? 1 - nx : nx) * CONFIG.canvasW,
+    y: (y / vh) * CONFIG.canvasH,
   };
 }
 

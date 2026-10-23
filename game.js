@@ -16,7 +16,7 @@ function Game() {
 }
 
 Game.prototype.reset = function () {
-  this.state = 'START'; // START | PLAYING | PAUSED | GAMEOVER
+  this.state = "START"; // START | PLAYING | PAUSED | GAMEOVER
   this.score = 0;
   this.best = 0;
   this.lives = CONFIG.maxLives;
@@ -26,7 +26,7 @@ Game.prototype.reset = function () {
   this.speedBonus = 0;
   this.spawnInterval = CONFIG.spawnInterval;
   this.lastSpawn = 0;
-  this.msg = '';
+  this.msg = "";
   this.msgUntil = 0;
   this.noHandSince = null;
   this.startBtn = null;
@@ -34,7 +34,7 @@ Game.prototype.reset = function () {
 };
 
 Game.prototype.start = function () {
-  this.state = 'PLAYING';
+  this.state = "PLAYING";
   this.score = 0;
   this.best = Math.max(this.best, this.score); // se actualiza al morir realmente; aquí solo conserva
   this.lives = CONFIG.maxLives;
@@ -43,16 +43,16 @@ Game.prototype.start = function () {
   this.cutsSinceDifficulty = 0;
   this.speedBonus = 0;
   this.spawnInterval = CONFIG.spawnInterval;
-  this.msg = '';
+  this.msg = "";
   this.noHandSince = null;
   fruits.items = [];
   fruits.halves = [];
-  particles.pool.forEach(p => (p.active = false));
+  particles.pool.forEach((p) => (p.active = false));
   this.lastSpawn = millis();
 };
 
 Game.prototype.isPlaying = function () {
-  return this.state === 'PLAYING';
+  return this.state === "PLAYING";
 };
 
 Game.prototype.addScore = function (pts) {
@@ -61,7 +61,7 @@ Game.prototype.addScore = function (pts) {
   this.streak++;
   if (this.streak % CONFIG.streakThreshold === 0) {
     this.score += CONFIG.streakBonus;
-    this.showMsg('Racha x' + this.streak);
+    this.showMsg("Racha x" + this.streak);
   }
   this.maybeRiseDifficulty();
 };
@@ -70,10 +70,15 @@ Game.prototype.maybeRiseDifficulty = function () {
   this.cutsSinceDifficulty++;
   if (this.cutsSinceDifficulty >= CONFIG.difficultyEveryCuts) {
     this.cutsSinceDifficulty = 0;
-    this.speedBonus += CONFIG.difficultySpeedStep;
+    // Tope: con más de +3 la fruta sale disparada por encima del canvas y deja
+    // de ser alcanzable. La dificultad sigue subiendo por frecuencia de aparición.
+    this.speedBonus = min(
+      this.speedBonus + CONFIG.difficultySpeedStep,
+      CONFIG.difficultySpeedMaxBonus,
+    );
     this.spawnInterval = max(
       CONFIG.spawnIntervalMin,
-      this.spawnInterval * CONFIG.difficultySpawnStep
+      this.spawnInterval * CONFIG.difficultySpawnStep,
     );
   }
 };
@@ -83,7 +88,7 @@ Game.prototype.loseLife = function () {
   this.streak = 0;
   if (this.lives <= 0) {
     this.lives = 0;
-    this.state = 'GAMEOVER';
+    this.state = "GAMEOVER";
     this.best = Math.max(this.best, this.score);
     stopDetection();
   }
@@ -92,7 +97,7 @@ Game.prototype.loseLife = function () {
 Game.prototype.missFruit = function (f) {
   f.alive = false;
   this.loseLife();
-  this.showMsg('Fruta perdida');
+  this.showMsg("Fruta perdida");
 };
 
 Game.prototype.showMsg = function (msg, t) {
@@ -102,24 +107,24 @@ Game.prototype.showMsg = function (msg, t) {
 
 Game.prototype.cutFruit = function (f) {
   const result = fruits.cut(f, knife.angle);
-  if (f.kind === 'bomb') {
+  if (f.kind === "bomb") {
     this.loseLife();
     particles.spawn(f.x, f.y, [120, 120, 120], 10);
-    this.showMsg('¡Bomba! -1 vida');
-  } else if (f.kind === 'golden') {
+    this.showMsg("¡Bomba! -1 vida");
+  } else if (f.kind === "golden") {
     this.addScore(CONFIG.pointsGolden);
-    this.showMsg('Fruta dorada ×3');
-  } else if (f.kind === 'heart') {
+    this.showMsg("Fruta dorada ×3");
+  } else if (f.kind === "heart") {
     this.lives = constrain(this.lives + 1, 0, CONFIG.maxLives);
-    this.showMsg('¡+1 vida!');
+    this.showMsg("¡+1 vida!");
   } else {
     this.addScore(CONFIG.pointsFruit);
   }
 };
 
 Game.prototype.update = function () {
-  if (this.state === 'START' || this.state === 'GAMEOVER') return;
-  if (this.state === 'PAUSED') return;
+  if (this.state === "START" || this.state === "GAMEOVER") return;
+  if (this.state === "PAUSED") return;
 
   const now = millis();
 
@@ -133,16 +138,12 @@ Game.prototype.update = function () {
     this.spawnInterval = constrain(
       random(CONFIG.spawnIntervalMin, this.spawnInterval * 0.96 + 80),
       CONFIG.spawnIntervalMin,
-      CONFIG.spawnInterval
+      CONFIG.spawnInterval,
     );
   }
 
   // Detección de cortes: segmento del cuchillo vs zona de colisión de cada fruta (espec. §5, §14.4)
-  if (
-    knife.active &&
-    knife.speed >= CONFIG.minCutSpeed &&
-    knife.prev
-  ) {
+  if (knife.active && knife.speed >= CONFIG.minCutSpeed && knife.prev) {
     for (let i = fruits.items.length - 1; i >= 0; i--) {
       const f = fruits.items[i];
       if (!f.alive || f.cut) continue;
@@ -152,7 +153,7 @@ Game.prototype.update = function () {
         knife.x,
         knife.y,
         f.x,
-        f.y
+        f.y,
       );
       if (d <= f.r + 6) this.cutFruit(f);
     }
@@ -165,7 +166,7 @@ Game.prototype.update = function () {
     if (
       f.y > height + f.r + 45 &&
       now - f.born > CONFIG.missGraceMs &&
-      f.kind !== 'bomb'
+      f.kind !== "bomb"
     ) {
       this.missFruit(f);
     }
@@ -178,17 +179,19 @@ Game.prototype.update = function () {
 Game.prototype.drawHUD = function () {
   const now = millis();
 
-  // Puntuación
+  // Puntuación (izquierda: centrada en x=30 se salía del canvas)
   fill(255);
   textSize(20);
   textStyle(BOLD);
-  text('Puntos: ' + this.score, 30, 30);
+  textAlign(LEFT, CENTER);
+  text("Puntos: " + this.score, 16, 30);
 
   // Vidas
   textSize(16);
   textStyle(NORMAL);
   fill(255, 120, 140);
-  text('Vidas', width - 90, 30);
+  textAlign(CENTER, CENTER);
+  text("Vidas", width - 90, 30);
   for (let i = 0; i < this.lives; i++) {
     fill(255, 80, 100);
     noStroke();
@@ -197,10 +200,10 @@ Game.prototype.drawHUD = function () {
 
   // Racha
   if (this.streak >= CONFIG.streakThreshold) {
-    fill('#ffd600');
+    fill("#ffd600");
     textSize(16);
     textStyle(BOLD);
-    text('Racha ×' + this.streak, width / 2, 30);
+    text("Racha ×" + this.streak, width / 2, 30);
   }
 
   // Mensaje flotante
@@ -212,6 +215,7 @@ Game.prototype.drawHUD = function () {
   }
 
   textStyle(NORMAL);
+  textAlign(CENTER, CENTER);
 };
 
 // ---------- Pantallas ----------
@@ -222,34 +226,50 @@ Game.prototype.drawStart = function () {
   fill(255);
   textSize(46);
   textStyle(BOLD);
-  text('FRUIT NINJA', width / 2, height / 2 - 70);
+  text("FRUIT NINJA", width / 2, height / 2 - 70);
   textSize(17);
-  fill('#bbcaff');
+  fill("#bbcaff");
   textStyle(NORMAL);
-  text('Corta frutas con la punta del índice', width / 2, height / 2 - 20);
-  text('Evita las bombas y no dejes caer las frutas', width / 2, height / 2 + 2);
-  this.startBtn = this.drawButton('INICIAR PARTIDA', width / 2, height / 2 + 62, 270, 48);
-  fill('#8b98c4');
+  text("Corta frutas con la punta del índice", width / 2, height / 2 - 20);
+  text(
+    "Evita las bombas y no dejes caer las frutas",
+    width / 2,
+    height / 2 + 2,
+  );
+  this.startBtn = this.drawButton(
+    "INICIAR PARTIDA",
+    width / 2,
+    height / 2 + 62,
+    270,
+    48,
+  );
+  fill("#8b98c4");
   textSize(14);
-  text('CLIC o ESPACIO para empezar', width / 2, height - 34);
+  text("CLIC o ESPACIO para empezar", width / 2, height - 34);
 };
 
 Game.prototype.drawGameOver = function () {
   fill(0, 0, 0, 175);
   rect(0, 0, width, height);
-  fill('#ff6b6b');
+  fill("#ff6b6b");
   textSize(42);
   textStyle(BOLD);
-  text('FIN DE PARTIDA', width / 2, height / 2 - 70);
+  text("FIN DE PARTIDA", width / 2, height / 2 - 70);
   fill(255);
   textSize(20);
   textStyle(NORMAL);
-  text('Puntuación: ' + this.score, width / 2, height / 2 - 20);
-  text('Mejor: ' + this.best, width / 2, height / 2 + 10);
-  this.restartBtn = this.drawButton('JUGAR DE NUEVO', width / 2, height / 2 + 62, 270, 48);
-  fill('#8b98c4');
+  text("Puntuación: " + this.score, width / 2, height / 2 - 20);
+  text("Mejor: " + this.best, width / 2, height / 2 + 10);
+  this.restartBtn = this.drawButton(
+    "JUGAR DE NUEVO",
+    width / 2,
+    height / 2 + 62,
+    270,
+    48,
+  );
+  fill("#8b98c4");
   textSize(14);
-  text('CLIC o ESPACIO para reiniciar', width / 2, height - 34);
+  text("CLIC o ESPACIO para reiniciar", width / 2, height - 34);
 };
 
 Game.prototype.drawPaused = function () {
@@ -258,18 +278,19 @@ Game.prototype.drawPaused = function () {
   fill(255);
   textSize(20);
   textStyle(BOLD);
-  text('PAUSADO — mano no detectada', width / 2, height / 2 - 10);
+  text("PAUSADO — mano no detectada", width / 2, height / 2 - 10);
   textSize(15);
-  fill('#bbcaff');
+  fill("#bbcaff");
   textStyle(NORMAL);
-  text('Mostrá la mano para continuar', width / 2, height / 2 + 20);
+  text("Mostrá la mano para continuar", width / 2, height / 2 + 20);
 };
 
 Game.prototype.drawButton = function (label, x, y, w, h) {
   const mx = mouseX;
   const my = mouseY;
-  const over = mx >= x - w / 2 && mx <= x + w / 2 && my >= y - h / 2 && my <= y + h / 2;
-  fill(over ? '#7c5cff' : '#4a3fa0');
+  const over =
+    mx >= x - w / 2 && mx <= x + w / 2 && my >= y - h / 2 && my <= y + h / 2;
+  fill(over ? "#7c5cff" : "#4a3fa0");
   noStroke();
   rect(x - w / 2, y - h / 2, w, h, 10);
   fill(255);

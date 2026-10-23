@@ -8,15 +8,17 @@ const CONFIG = {
   canvasH: 480,
   // Detección de manos (ml5 HandPose)
   maxHands: 1,
-  modelType: 'lite',
+  modelType: "lite",
   flipHorizontal: true,
   smoothingAlpha: 0.4,
-  minCutSpeed: 130,        // px/s: mínimo para contar como corte (evita cortar quieto)
-  noHandPauseMs: 1200,     // ms sin mano → pausa automática
+  minCutSpeed: 130, // px/s: mínimo para contar como corte (evita cortar quieto)
+  noHandPauseMs: 1200, // ms sin mano → pausa automática
   // Frutas y física
   gravity: 0.38,
-  spawnSpeedBase: 7.5,
-  spawnSpeedMax: 12,
+  // Con esta gravedad, el arco visible depende de la velocidad de lanzamiento:
+  // v²/(2g) ≈ 222-380 px, suficiente para cruzar media pantalla y volver.
+  spawnSpeedBase: 13,
+  spawnSpeedMax: 17,
   spawnInterval: 750,
   spawnIntervalMin: 330,
   maxFruits: 9,
@@ -24,6 +26,7 @@ const CONFIG = {
   // Dificultad
   difficultyEveryCuts: 12,
   difficultySpeedStep: 1.5,
+  difficultySpeedMaxBonus: 3,
   difficultySpawnStep: 0.88,
   // Vidas y puntuación (espec. §15)
   maxLives: 3,
@@ -37,7 +40,7 @@ const CONFIG = {
   probHeart: 0.04,
   // Partículas (espec. §10)
   maxParticles: 240,
-  particleLifeFrames: 42
+  particleLifeFrames: 42,
 };
 
 let cnv;
@@ -49,13 +52,13 @@ let knife = {
   angle: 0,
   speed: 0,
   active: false,
-  trail: []
+  trail: [],
 };
 let lastRaw = null;
 
 function setup() {
   cnv = createCanvas(CONFIG.canvasW, CONFIG.canvasH);
-  cnv.parent('sketch-container');
+  cnv.parent("sketch-container");
   pixelDensity(1);
   textAlign(CENTER, CENTER);
 
@@ -73,14 +76,14 @@ function setup() {
   setInterval(() => {
     if (cameraWarned) return;
     if (!videoReady && !modelError) {
-      updateStatus('Esperando permiso de cámara… (concedelo en el navegador)');
+      updateStatus("Esperando permiso de cámara… (concedelo en el navegador)");
       cameraWarned = true;
     }
   }, 3000);
 }
 
 function updateStatus(msg) {
-  const el = document.getElementById('status');
+  const el = document.getElementById("status");
   if (el) el.textContent = msg;
 }
 
@@ -90,11 +93,11 @@ function draw() {
   // Pantallas de carga / error antes de poder jugar
   if (!cameraIsReady()) {
     if (modelError) {
-      drawStatus('No se pudo cargar el modelo de manos.');
+      drawStatus("No se pudo cargar el modelo de manos.");
     } else if (!videoReady) {
-      drawStatus('Esperando acceso a la cámara…');
+      drawStatus("Esperando acceso a la cámara…");
     } else {
-      drawStatus('Iniciando cámara…');
+      drawStatus("Iniciando cámara…");
     }
     return;
   }
@@ -124,19 +127,21 @@ function draw() {
   // Pausa automática si la mano sale del encuadre (espec. §4, §15)
   updateNoHandPause();
 
-  // Mantener la detección activa mientras se juega
-  if (game.state === 'PLAYING' && handPoseModel && !handPoseModel.detecting) {
+  // Mantener la detección activa siempre que cámara y modelo estén listos.
+  // No depende de game.state para que el cuchillo aparezca tan pronto como
+  // la cámara funcione, incluso antes de iniciar la partida.
+  if (handPoseModel && modelReady && videoReady && !handPoseModel.detecting) {
     startDetection();
   }
 
   // HUD / pantallas de estado
-  if (game.state === 'PLAYING') {
+  if (game.state === "PLAYING") {
     game.drawHUD();
-  } else if (game.state === 'START') {
+  } else if (game.state === "START") {
     game.drawStart();
-  } else if (game.state === 'GAMEOVER') {
+  } else if (game.state === "GAMEOVER") {
     game.drawGameOver();
-  } else if (game.state === 'PAUSED') {
+  } else if (game.state === "PAUSED") {
     game.drawPaused();
   }
 }
@@ -155,6 +160,11 @@ function updateKnifeFromRaw() {
   knife.active = found;
 
   if (!found) {
+    // Al perder la mano se descarta la muestra anterior. Si no, al reaparecer
+    // el segmento uniría la posición vieja con la nueva y cortaría en diagonal
+    // toda la pantalla (espec. §14.4).
+    lastRaw = null;
+    knife.speed = 0;
     knife.prev = { x: knife.x, y: knife.y };
     return;
   }
@@ -164,10 +174,13 @@ function updateKnifeFromRaw() {
 
   // Velocidad y dirección se calculan sobre la posición CRUDA (sin suavizar),
   // para que los movimientos rápidos no se escondan al detectar cortes.
+  // En el frame de reaparición no hay distancia recorrida: velocidad 0.
   if (lastRaw) {
     const dt = max(now - lastRaw.t, 1);
-    knife.speed = dist(raw.x, raw.y, lastRaw.x, lastRaw.y) / dt * 1000;
+    knife.speed = (dist(raw.x, raw.y, lastRaw.x, lastRaw.y) / dt) * 1000;
     knife.angle = atan2(raw.y - lastRaw.y, raw.x - lastRaw.x);
+  } else {
+    knife.speed = 0;
   }
   lastRaw = raw;
 
@@ -192,7 +205,7 @@ function drawKnife() {
   for (let i = 1; i < knife.trail.length; i++) {
     const a = knife.trail[i - 1];
     const b = knife.trail[i];
-    const alpha = (255 * (i / (knife.trail.length - 1))) * 0.75;
+    const alpha = 255 * (i / (knife.trail.length - 1)) * 0.75;
     const w = 5 * (i / knife.trail.length) + 1;
     stroke(170, 215, 255, alpha);
     strokeWeight(w);
@@ -218,20 +231,21 @@ function drawKnife() {
 // ---------- Pausa por falta de mano ----------
 
 function updateNoHandPause() {
-  if (game.state !== 'PLAYING') return;
+  if (game.state !== "PLAYING") return;
   const now = millis();
   const found = rawTip && rawTip.found && now - rawTip.t < 600;
 
   if (!found) {
     if (!game.noHandSince) game.noHandSince = now;
     else if (now - game.noHandSince > CONFIG.noHandPauseMs) {
-      game.state = 'PAUSED';
-      stopDetection();
+      // Pausa del juego, no de la detección: apagarla acá impediría ver
+      // la mano volver y salir sola de la pausa.
+      game.state = "PAUSED";
     }
   } else {
     game.noHandSince = null;
-    if (game.state === 'PAUSED') {
-      game.state = 'PLAYING';
+    if (game.state === "PAUSED") {
+      game.state = "PLAYING";
     }
   }
 }
@@ -239,10 +253,18 @@ function updateNoHandPause() {
 // ---------- Entrada (ratón solo como conveniencia para menús) ----------
 
 function mousePressed() {
-  if (game.state === 'START' && game.startBtn && insideRect(mouseX, mouseY, game.startBtn)) {
+  if (
+    game.state === "START" &&
+    game.startBtn &&
+    insideRect(mouseX, mouseY, game.startBtn)
+  ) {
     game.start();
   }
-  if (game.state === 'GAMEOVER' && game.restartBtn && insideRect(mouseX, mouseY, game.restartBtn)) {
+  if (
+    game.state === "GAMEOVER" &&
+    game.restartBtn &&
+    insideRect(mouseX, mouseY, game.restartBtn)
+  ) {
     game.start();
   }
 }
@@ -252,7 +274,7 @@ function insideRect(x, y, b) {
 }
 
 function keyPressed() {
-  if (key === ' ' || keyCode === 13) {
-    if (game.state === 'START' || game.state === 'GAMEOVER') game.start();
+  if (key === " " || keyCode === 13) {
+    if (game.state === "START" || game.state === "GAMEOVER") game.start();
   }
 }
