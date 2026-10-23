@@ -45,8 +45,8 @@ let errorMsg = "";
 let layer; // lienzo donde queda el trazo
 let smooth = null; // posición suavizada de la punta
 let strokeActive = false; // hay un trazo en curso
-let prevPoint = null; // último punto suavizado del trazo
-let prevMid = null; // punto medio anterior de la curva
+let strokePoints = []; // puntos {x, y, w} del trazo actual
+let drawnUpTo = 0; // último punto ya conectado
 let widthSmooth = BRUSH_MAX; // grosor suavizado
 
 let stopColors = []; // COLOR_STOPS como p5.Color
@@ -120,8 +120,8 @@ function windowResized() {
   prepLayer();
   smooth = null;
   strokeActive = false;
-  prevPoint = null;
-  prevMid = null;
+  strokePoints = [];
+  drawnUpTo = 0;
   lastRaw = null;
   speed = 0;
 }
@@ -280,8 +280,8 @@ function updateFist(isFist) {
     layer.clear();
     // El puño también corta el trazo en curso
     strokeActive = false;
-    prevPoint = null;
-    prevMid = null;
+    strokePoints = [];
+    drawnUpTo = 0;
     fistCleared = true;
   }
 }
@@ -374,8 +374,8 @@ function drawBrush(hand, painting) {
     // Sin mano: no se dibuja y se corta el trazo
     smooth = null;
     strokeActive = false;
-    prevPoint = null;
-    prevMid = null;
+    strokePoints = [];
+    drawnUpTo = 0;
     lastNote = -1;
     drawMessage("Muestra tu mano");
     return;
@@ -395,34 +395,42 @@ function drawBrush(hand, painting) {
 
   if (painting) {
     if (!strokeActive) {
-      // Inicio del trazo: se guarda el punto y se espera el siguiente
+      // Inicio del trazo
       strokeActive = true;
-      prevPoint = { x: smooth.x, y: smooth.y };
-      prevMid = null;
-    } else if (!prevMid) {
-      // Segundo punto: se prepara el primer punto medio (sin tramo recto)
-      prevMid = {
-        x: (prevPoint.x + smooth.x) / 2,
-        y: (prevPoint.y + smooth.y) / 2,
-      };
-      prevPoint = { x: smooth.x, y: smooth.y };
+      strokePoints = [{ x: smooth.x, y: smooth.y, w: widthSmooth }];
+      drawnUpTo = 0;
     } else {
-      const moved = dist(prevPoint.x, prevPoint.y, smooth.x, smooth.y);
+      const last = strokePoints[strokePoints.length - 1];
+      const moved = dist(last.x, last.y, smooth.x, smooth.y);
 
       if (moved > MAX_JUMP) {
         // Salto brusco del tracking: se reinicia el trazo sin línea
-        prevPoint = { x: smooth.x, y: smooth.y };
-        prevMid = null;
-      } else {
-        // Curva suave entre el punto medio anterior y el nuevo
-        if (moved > 0.3) {
-          const mid = {
-            x: (prevPoint.x + smooth.x) / 2,
-            y: (prevPoint.y + smooth.y) / 2,
-          };
-          drawSmooth(prevMid, prevPoint, mid, c, widthSmooth);
-          prevMid = mid;
-          prevPoint = { x: smooth.x, y: smooth.y };
+        strokePoints = [{ x: smooth.x, y: smooth.y, w: widthSmooth }];
+        drawnUpTo = 0;
+      } else if (moved > 0.3) {
+        strokePoints.push({ x: smooth.x, y: smooth.y, w: widthSmooth });
+        const n = strokePoints.length;
+
+        // La spline necesita un punto a cada lado; por eso se dibuja
+        // el tramo anterior en cuanto llega el punto nuevo.
+        if (n === 3) {
+          drawSpline(
+            strokePoints[0],
+            strokePoints[0],
+            strokePoints[1],
+            strokePoints[2],
+            c,
+          );
+          drawnUpTo = 1;
+        } else if (n >= 4) {
+          drawSpline(
+            strokePoints[n - 4],
+            strokePoints[n - 3],
+            strokePoints[n - 2],
+            strokePoints[n - 1],
+            c,
+          );
+          drawnUpTo = n - 2;
         }
 
         if (moved > 1) {
@@ -433,7 +441,7 @@ function drawBrush(hand, painting) {
     }
   } else {
     // Sin mano o con puño se cierra el trazo y se corta
-    finishStroke(c, widthSmooth);
+    finishStroke(c);
     lastNote = -1;
   }
 
@@ -454,37 +462,64 @@ function drawBrush(hand, painting) {
   }
 }
 
-// Dibuja una curva cuadrática subdividida en tramos cortos,
-// para que no queden huecos ni esquinas al mover la mano rápido.
-function drawSmooth(a, control, b, color, weight) {
-  const steps = max(1, ceil(dist(a.x, a.y, b.x, b.y) / 3));
+// Dibuja un tramo de spline Catmull-Rom entre p1 y p2.
+// p0 y p3 son los vecinos que definen las tangentes: la curva pasa
+// por los puntos y no forma esquinas.
+function drawSpline(p0, p1, p2, p3, color) {
+  const steps = max(2, ceil(dist(p1.x, p1.y, p2.x, p2.y) / 2));
   layer.stroke(color);
-  layer.strokeWeight(weight);
 
-  let px = a.x;
-  let py = a.y;
+  let px = p1.x;
+  let py = p1.y;
   for (let i = 1; i <= steps; i++) {
     const t = i / steps;
-    const mt = 1 - t;
-    const x = mt * mt * a.x + 2 * mt * t * control.x + t * t * b.x;
-    const y = mt * mt * a.y + 2 * mt * t * control.y + t * t * b.y;
-    layer.line(px, py, x, y);
-    px = x;
-    py = y;
+    const q = catmullPoint(p0, p1, p2, p3, t);
+
+    // El grosor también se interpola a lo largo del tramo
+    layer.strokeWeight(lerp(p1.w, p2.w, t));
+    layer.line(px, py, q.x, q.y);
+    px = q.x;
+    py = q.y;
   }
 }
 
-// Cierra el último tramo con una prolongación curva y corta el trazo
-function finishStroke(color, weight) {
-  if (strokeActive && prevMid && prevPoint) {
-    // Control extrapolado: la curva continúa la dirección, sin tramo recto
-    const cx = 2 * prevPoint.x - prevMid.x;
-    const cy = 2 * prevPoint.y - prevMid.y;
-    drawSmooth(prevMid, { x: cx, y: cy }, prevPoint, color, weight);
+// Punto de la spline Catmull-Rom para t en [0, 1]
+function catmullPoint(p0, p1, p2, p3, t) {
+  const t2 = t * t;
+  const t3 = t2 * t;
+
+  return {
+    x:
+      0.5 *
+      (2 * p1.x +
+        (-p0.x + p2.x) * t +
+        (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 +
+        (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3),
+    y:
+      0.5 *
+      (2 * p1.y +
+        (-p0.y + p2.y) * t +
+        (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 +
+        (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3),
+  };
+}
+
+// Dibuja los tramos que faltan y corta el trazo
+function finishStroke(color) {
+  if (strokeActive && strokePoints.length >= 2) {
+    const n = strokePoints.length;
+    for (let j = drawnUpTo; j < n - 1; j++) {
+      const p0 = strokePoints[max(0, j - 1)];
+      const p1 = strokePoints[j];
+      const p2 = strokePoints[j + 1];
+      // En el último tramo se repite el extremo para cerrar suave
+      const p3 = strokePoints[min(n - 1, j + 2)];
+      drawSpline(p0, p1, p2, p3, color);
+    }
   }
   strokeActive = false;
-  prevPoint = null;
-  prevMid = null;
+  strokePoints = [];
+  drawnUpTo = 0;
 }
 
 // Nota del rango de velocidad; solo se llama mientras se pinta
