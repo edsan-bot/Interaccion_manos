@@ -1,9 +1,11 @@
-# Pintar en el aire con el dedo
+# Manos — cuadrícula neón
 
-Experiencia web para dibujar en pantalla moviendo el dedo índice frente a la cámara. La cámara se
-ve de fondo en modo espejo, la punta del dedo funciona como pincel y cada color de la paleta tiene
-su propia nota de piano. Sin build ni dependencias: solo archivos estáticos con p5.js 2.3.2 y
-ml5.js 1.4.0 cargados por CDN.
+Experiencia web de visión artificial: una cuadrícula de puntos apagados que se encienden en colores
+neón cuando pellizcas con el pulgar y el índice. Cada columna de la cuadrícula suena con una nota
+de la escala pentatónica de Do. El esqueleto de cada mano detectada se dibuja siempre, en cian y
+magenta, sobre un fondo negro. La cámara no se muestra: solo alimenta al modelo.
+
+Sin build ni dependencias locales: archivos estáticos con p5.js 2.3.2 y ml5.js 1.4.0 por CDN.
 
 ## Qué necesitas
 
@@ -17,18 +19,35 @@ ml5.js 1.4.0 cargados por CDN.
 2. Instala la extensión **Live Server** si no la tienes.
 3. Haz clic en **Go Live** (o abre `index.html` con Live Server). El sitio se sirve en
    `http://127.0.0.1:5500` o el puerto que asigne.
-4. Pulsa **"Comenzar"** y concede el permiso de la cámara.
-5. Mueve el dedo índice frente a la cámara para pintar.
+4. Pulsa **"Comenzar"** y acepta el permiso de la cámara. Ese clic activa también el sonido.
 
 No abras `index.html` directamente con `file://`: el navegador bloquea la cámara fuera de un
 contexto seguro (`http://localhost` o HTTPS).
 
-## Controles
+## Cómo se usa
 
-- **Dedo índice**: pinta apenas se muestra la mano, sin gestos extra.
-- **Velocidad**: lento = color frío y trazo grueso; rápido = color cálido y trazo fino.
-- **Nota de piano**: suena mientras pintas.
-- **Puño cerrado ~1 s**: borra el lienzo.
-- **Tecla C**: borra el lienzo.
+- **Muestra la mano**: aparece su esqueleto con 21 puntos. La mano izquierda de la pantalla es cian
+  y la otra magenta.
+- **Pellizca** (pulgar + índice): los puntos de la cuadrícula a menos de 80 px crecen y se encienden.
+- **Muévete rápido o lento**: la velocidad decide el color neón (frío cuando vas lento, cálido
+  cuando vas rápido).
+- **Cada columna tiene su nota**: la cuadrícula sonora va de grave (izquierda) a agudo (derecha).
+  La nota suena cuando el punto llega al 70% de su tamaño.
 
-Si no se detecta la mano, no se dibuja ni suena nada y aparece el mensaje "Muestra tu mano".
+## Borrar
+
+- **Aplaude**: las dos palmas se juntan rápido (enfriamiento de 1 s).
+- **Cierra el puño** durante un segundo.
+- O pulsa la tecla **C**.
+
+El borrado es una animación: los puntos se encogen y vuelven al gris en medio segundo.
+
+## Apagado lento
+
+Los puntos se apagan solos en unos 20 segundos. Si pintas seguido, el lienzo se llena; si paras,
+vuelve al estado inicial.
+
+## Estado en pantalla
+
+Arriba a la izquierda, en gris: `Cámara: lista`, `Modelo: cargado` y `Manos detectadas: N`. Sirve
+para saber si el modelo arrancó y cuántas manos está viendo.
