@@ -1,9 +1,10 @@
 # Manos — cuadrícula neón
 
 Experiencia web de visión artificial: una cuadrícula de puntos apagados que se encienden en colores
-neón cuando pellizcas con el pulgar y el índice. Cada columna de la cuadrícula suena con una nota
-de la escala pentatónica de Do. El esqueleto de cada mano detectada se dibuja siempre, en cian y
-magenta, sobre un fondo negro. La cámara no se muestra: solo alimenta al modelo.
+neón cuando pasas el dedo índice cerca de ellos. Cada columna de la cuadrícula suena con una nota
+de la escala de Do. El esqueleto de cada mano detectada se dibuja siempre, en cian y
+magenta, sobre un fondo negro. La cámara no se muestra: solo alimenta al modelo. La cuadrícula ocupa
+toda la ventana, de borde a borde.
 
 Sin build ni dependencias locales: archivos estáticos con p5.js 2.3.2 y ml5.js 1.4.0 por CDN.
 
@@ -28,11 +29,19 @@ contexto seguro (`http://localhost` o HTTPS).
 
 - **Muestra la mano**: aparece su esqueleto con 21 puntos. La mano izquierda de la pantalla es cian
   y la otra magenta.
-- **Pellizca** (pulgar + índice): los puntos de la cuadrícula a menos de 80 px crecen y se encienden.
+- **Pasa el dedo índice** por la pantalla: los puntos a menos de 80 px se encienden y crecen. No
+  hace falta ningún gesto previo.
 - **Muévete rápido o lento**: la velocidad decide el color neón (frío cuando vas lento, cálido
   cuando vas rápido).
-- **Cada columna tiene su nota**: la cuadrícula sonora va de grave (izquierda) a agudo (derecha).
-  La nota suena cuando el punto llega al 70% de su tamaño.
+- **Cada columna tiene su nota**: la cuadrícula sonora va de grave (izquierda) a agudo (derecha),
+  con la escala de Do completa. La nota suena cuando el punto llega al 70% de su tamaño.
+
+## Sonidos de gestos
+
+- **Comenzar**: arpegio ascendente.
+- **Aplauso**: chasquido.
+- **Puño**: golpe grave.
+- **Tecla C**: barrido descendente.
 
 ## Borrar
 

@@ -7,7 +7,6 @@ const CAM_H = 480; // alto de captura
 
 const COLS = 13; // columnas de la cuadrícula
 const ROWS = 16; // filas de la cuadrícula
-const MARGIN = 64; // margen máximo respecto del borde
 const DOT_START = 1.5; // radio inicial (apagado)
 const DOT_MAX = 12; // radio final máximo
 const GROWTH = 0.12; // suavizado del crecimiento
@@ -17,16 +16,16 @@ const FADE_SEC = 20; // apagado lento: segundos de tamaño máximo a mínimo
 const CLEAR_SPEED = 0.15; // lerp del borrado suave
 
 const TIP_SMOOTH = 0.35; // suavizado de la punta del índice
-const PINCH_RATIO = 0.45; // pellizco: distancia 4↔8 / largo de la palma
 const MAX_SPEED = 1400; // px/s del neón más cálido
 const SPEED_TAU = 120; // constante de tiempo del suavizado de velocidad
 const HAND_TIMEOUT = 500; // gracia sin detección antes de ocultar el esqueleto
 
-// Melodía: una nota por columna, pentatónica de Do en dos octavas (Do4 → Mi6)
+// Melodía: una nota por columna, escala de Do (7 notas por octava), Do4 → La5
 const NOTES = [
-  261.63, 293.66, 329.63, 392.0, 440.0, 523.25, 587.33, 659.25, 783.99, 880.0,
-  1046.5, 1174.66, 1318.51,
+  261.63, 293.66, 329.63, 349.23, 392.0, 440.0, 493.88, 523.25, 587.33, 659.25,
+  698.46, 783.99, 880.0,
 ];
+const START_NOTES = [523.25, 659.25, 783.99]; // arpegio del botón Comenzar
 const NOTE_GAP = 250; // máximo 4 notas por segundo
 const TRIGGER_LO = 0.7; // fracción de tamaño que dispara la nota
 const REARM_LO = 0.35; // por debajo de esto la nota se vuelve a armar
@@ -124,12 +123,12 @@ function draw() {
 
   // Qué puntos se están pintando en este frame
   for (const d of dots) d.painting = false;
-  for (const h of detected) if (h.pinch) paintAt(h);
+  for (const h of detected) paintAt(h);
 
   updateDots(min(deltaTime, 250), now);
   drawDots(); // la cuadrícula se ve desde el primer frame
-  drawSkeletons(detected);
   drawCursors(detected);
+  drawSkeletons(detected); // arriba de todo: el esqueleto siempre se distingue
   checkClearGestures(detected, now);
   drawStatus();
 }
@@ -171,16 +170,15 @@ function createDots() {
   }
 }
 
-// Centra la cuadrícula y recalcula las posiciones (sin perder el progreso)
+// Distribuye la cuadrícula por toda la ventana (borde a borde), sin recuadro.
+// Cada punto queda en el centro de su celda, así los del borde no se cortan.
 function layoutGrid() {
-  const m = min(MARGIN, min(width, height) * 0.06);
-  const cell = min((width - m * 2) / (COLS - 1), (height - m * 2) / (ROWS - 1));
-  const ox = (width - cell * (COLS - 1)) / 2;
-  const oy = (height - cell * (ROWS - 1)) / 2;
+  const cellX = width / COLS;
+  const cellY = height / ROWS;
 
   for (const d of dots) {
-    d.x = ox + d.i * cell;
-    d.y = oy + d.j * cell;
+    d.x = (d.i + 0.5) * cellX;
+    d.y = (d.j + 0.5) * cellY;
   }
 }
 
@@ -289,7 +287,6 @@ function currentHands() {
       idx: i,
       pts,
       tip: tipSmooth[i],
-      pinch: isPinch(pts),
       fist: isFist(pts),
       palmLen: dist(pts[0].x, pts[0].y, pts[9].x, pts[9].y),
       palm: {
@@ -303,13 +300,6 @@ function currentHands() {
   for (let i = mapped.length; i < tipSmooth.length; i++) tipSmooth[i] = null;
 
   return out;
-}
-
-// Pellizco: pulgar (4) cerca del índice (8), relativo al tamaño de la palma
-function isPinch(pts) {
-  const palm = dist(pts[0].x, pts[0].y, pts[9].x, pts[9].y);
-  const gap = dist(pts[4].x, pts[4].y, pts[8].x, pts[8].y);
-  return gap < max(palm, 60) * PINCH_RATIO;
 }
 
 // Puño: ningún dedo extendido (la punta queda más cerca de la muñeca que su nudillo)
@@ -329,27 +319,40 @@ function isFist(pts) {
   return extended === 0;
 }
 
+// Traza los huesos dos veces: sombra oscura y luego color, para que el
+// esqueleto no se pierda sobre los puntos neón.
+function drawBones(pts, r, g, b, a, weight) {
+  stroke(r, g, b, a);
+  strokeWeight(weight);
+  noFill();
+  for (const [i, j] of BONES) {
+    const pa = pts[i];
+    const pb = pts[j];
+    if (pa && pb) line(pa.x, pa.y, pb.x, pb.y);
+  }
+}
+
 function drawSkeletons(list) {
   for (const h of list) {
     const base = handColor[h.idx];
     const pts = h.pts;
+    const r = red(base);
+    const g = green(base);
+    const b = blue(base);
 
-    // Huesos
-    stroke(red(base), green(base), blue(base), 170);
-    strokeWeight(1.5);
-    noFill();
-    for (const [a, b] of BONES) {
-      const pa = pts[a];
-      const pb = pts[b];
-      if (pa && pb) line(pa.x, pa.y, pb.x, pb.y);
-    }
+    // Sombra: separa el hueso del neón que hay detrás
+    drawBones(pts, 0, 0, 0, 200, 5);
 
-    // Keypoints: las puntas de los dedos, más grandes
-    noStroke();
+    // Huesos a color pleno, un poco más gruesos
+    drawBones(pts, r, g, b, 255, 2);
+
+    // Keypoints con borde oscuro: se leen sobre cualquier fondo
+    stroke(0, 0, 0, 200);
+    strokeWeight(2);
+    fill(base);
     for (let i = 0; i < pts.length; i++) {
       const p = pts[i];
       if (!p) continue;
-      fill(base);
       circle(p.x, p.y, TIPS.includes(i) ? 9 : 5);
     }
   }
@@ -359,20 +362,12 @@ function drawCursors(list) {
   for (const h of list) {
     const c = neonColor(h.idx, speeds[h.idx]);
 
-    if (h.pinch) {
-      // Pintando: halo del radio de influencia + núcleo lleno
-      noStroke();
-      fill(c.r, c.g, c.b, 40);
-      circle(h.tip.x, h.tip.y, REACH * 0.75);
-      fill(c.r, c.g, c.b);
-      circle(h.tip.x, h.tip.y, 14);
-    } else {
-      // Solo cursor: hueco
-      noFill();
-      stroke(c.r, c.g, c.b, 150);
-      strokeWeight(1.5);
-      circle(h.tip.x, h.tip.y, 16);
-    }
+    // Mano activa: halo del radio de influencia + núcleo lleno
+    noStroke();
+    fill(c.r, c.g, c.b, 40);
+    circle(h.tip.x, h.tip.y, REACH * 0.75);
+    fill(c.r, c.g, c.b);
+    circle(h.tip.x, h.tip.y, 14);
   }
 }
 
@@ -386,6 +381,7 @@ function checkClearGestures(detected, now) {
   } else {
     if (fistStart === 0) fistStart = now;
     if (fistArmed && now - fistStart >= FIST_MS) {
+      playThud();
       clearCanvas();
       fistArmed = false;
     }
@@ -403,6 +399,7 @@ function checkClearGestures(detected, now) {
 
   if (d < cerca && acercando && now - lastClapAt >= CLAP_GAP) {
     lastClapAt = now;
+    playClap();
     clearCanvas();
   }
   prevPalmDist = d;
@@ -414,7 +411,10 @@ function clearCanvas() {
 }
 
 function keyPressed() {
-  if (key === "c" || key === "C" || keyCode === 67) clearCanvas();
+  if (key === "c" || key === "C" || keyCode === 67) {
+    playSweep();
+    clearCanvas();
+  }
 }
 
 // --- Velocidad y color ---
@@ -481,6 +481,10 @@ function toCanvas(x, y) {
 // --- Texto de estado ---
 function drawStatus() {
   noStroke();
+  // Fondo tenue: la cuadrícula ahora llega al borde y el texto sigue legible
+  fill(0, 0, 0, 140);
+  rect(8, 8, 220, errorMsg ? 76 : 60, 8);
+
   textAlign(LEFT, TOP);
   textSize(12);
   fill(150);
@@ -500,14 +504,23 @@ function initAudio() {
   if (!AC) return;
 
   audioCtx = new AC();
-  if (audioCtx.state === "suspended") audioCtx.resume();
+  if (audioCtx.state === "suspended") {
+    const resumed = audioCtx.resume();
+    if (resumed && typeof resumed.then === "function") {
+      resumed.then(playStartChime).catch(() => {});
+    } else {
+      playStartChime();
+    }
+  } else {
+    playStartChime();
+  }
 }
 
 // Nota suave tipo piano: ataque rápido, caída corta, dos osciladores
-function playNote(freq, volume) {
+function playNote(freq, volume, when = 0) {
   if (!audioCtx || audioCtx.state !== "running") return;
 
-  const t = audioCtx.currentTime;
+  const t = audioCtx.currentTime + when;
 
   const gain = audioCtx.createGain();
   gain.gain.setValueAtTime(0.0001, t);
@@ -532,6 +545,86 @@ function playNote(freq, volume) {
   harmGain.connect(gain);
   harm.start(t);
   harm.stop(t + 0.65);
+}
+
+// Arpegio corto al pulsar "Comenzar"
+function playStartChime() {
+  if (!audioCtx || audioCtx.state !== "running") return;
+  START_NOTES.forEach((freq, i) => playNote(freq, 0.12, i * 0.09));
+}
+
+// Barrido descendente (tecla C)
+function playSweep() {
+  if (!audioCtx || audioCtx.state !== "running") return;
+
+  const t = audioCtx.currentTime;
+
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.exponentialRampToValueAtTime(0.18, t + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+  gain.connect(audioCtx.destination);
+
+  const osc = audioCtx.createOscillator();
+  osc.type = "triangle";
+  osc.frequency.setValueAtTime(720, t);
+  osc.frequency.exponentialRampToValueAtTime(150, t + 0.4);
+  osc.connect(gain);
+  osc.start(t);
+  osc.stop(t + 0.45);
+}
+
+// Golpe grave (puño cerrado)
+function playThud() {
+  if (!audioCtx || audioCtx.state !== "running") return;
+
+  const t = audioCtx.currentTime;
+
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.exponentialRampToValueAtTime(0.28, t + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+  gain.connect(audioCtx.destination);
+
+  const osc = audioCtx.createOscillator();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(140, t);
+  osc.frequency.exponentialRampToValueAtTime(55, t + 0.28);
+  osc.connect(gain);
+  osc.start(t);
+  osc.stop(t + 0.32);
+}
+
+// Chasquido de aplauso: ruido corto con filtro de banda
+function playClap() {
+  if (!audioCtx || audioCtx.state !== "running") return;
+
+  const t = audioCtx.currentTime;
+  const dur = 0.16;
+  const length = max(1, floor(audioCtx.sampleRate * dur));
+  const buffer = audioCtx.createBuffer(1, length, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < length; i++) {
+    const k = 1 - i / length; // caída rápida
+    data[i] = (Math.random() * 2 - 1) * k * k;
+  }
+
+  const src = audioCtx.createBufferSource();
+  src.buffer = buffer;
+
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = "bandpass";
+  filter.frequency.value = 1800;
+  filter.Q.value = 0.9;
+
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0.35, t);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+
+  src.connect(filter);
+  filter.connect(gain);
+  gain.connect(audioCtx.destination);
+  src.start(t);
 }
 
 // --- Cámara y modelo ---
